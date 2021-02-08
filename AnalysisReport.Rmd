@@ -1,0 +1,122 @@
+---
+title: "Analysis Report of Classification Model"
+author: "Juan F. Gonzalez"
+date: "2/7/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Summary
+
+The objective of this project was to predict the manner in which a group of 
+people did a weight lifting exercise. To do this we have a data set that 
+consists of 160 variables and our outcome variable of interest is a categorical 
+variable, so this is a classification problem. The data set was explored, and 
+after several changes, only 40 predictors were left. Then, given that this was a 
+classification problem, I chose a random forest algorithm to predict the 
+category. The data set was split into two parts, one for training and one for 
+validation: The final algorithm got an accuracy of 0.99.
+
+## Data Exploration and Cleaning
+
+The first step was to load the data. At once, two variables are omitted, the 
+number of the observation and user, which are most likely irrelevant.
+
+```{r exploration1, echo=TRUE}
+library(caret)
+
+#X and user are removed
+
+training <- read.csv("pml-training.csv")[,-c(1,2)]
+testing <- read.csv("pml-testing.csv")[,-c(1,2)]
+```
+
+After slightly examining looking at the variables, it was clear that many of 
+them were full of NA, so the variables that were mostly NAs were removed.
+
+```{r exploration2, echo=TRUE}
+#The variables full of NA are removed
+
+usl <- (apply(is.na(training),2,sum)/apply(training,2,length)) > 0.5
+
+training <- training[, -which(usl)]
+testing <- testing[, -which(usl)]
+```
+
+Also, there were a lot of variables filled with empty strings, so these 
+variables were also deleted.
+
+```{r exploration3, echo=TRUE}
+#The variables filled with empty strings are removed.
+
+emp <- (apply(training == "",2,sum)/apply(training,2,length)) > 0.5
+
+training <- training[, -which(emp)]
+testing <- testing[, -which(emp)]
+```
+
+Some variables like the date of the exercise and the status of additional 
+windows were also discarded.
+
+```{r exploration4, echo=TRUE}
+#raw_timestamp_part_1, raw_timestamp_part_2, cvtd_timestamp, new_window are not 
+#considered important.
+
+training <- training[, -c(1, 2, 3, 4)]
+testing <- testing[, -c(1, 2, 3, 4)]
+```
+
+Another concern was the presence of highly correlated variables, which would not 
+contribute much to the model, but would increase its variance. Therefore, I 
+looked for the presence of highly correlated pairs of variables, and deleted one 
+from the pair.
+
+```{r exploration5, echo=TRUE}
+#Highly correlated variables are removed
+
+cor1 <- cor(training[,-54])
+cor1[upper.tri(cor1,diag=TRUE)] <- 0
+numc <- apply(abs(cor1) > 0.8,2,sum) > 0
+
+training <- training[, -which(numc)]
+testing <- testing[, -which(numc)]
+```
+
+After this filtering, there were only 40 predictors left for one outcome.  
+
+Now, I created a data split to have a sample for training and a sample for 
+testing the algorithm.
+
+```{r exploration6, echo=TRUE}
+set.seed(546)
+inTrain <- createDataPartition(y = training$classe, p = 0.6, list = F)
+trainset <- training[inTrain,]
+validtn <- training[-inTrain,]
+```
+
+## Model Selection, Implementation and Testing
+
+Since this was a classification problem (the outcome was an unordered 
+categorical variable), there were a lot of algorithms that were not applicable 
+to this scenario. Classification trees seemed like the best alternative. In 
+order to avoid bias, I decided to use a random forest algorithm. However, since 
+there was a lot of data in the resulting train set (11776 observations even 
+after the data split), then there was not a needed to train to many trees, since 
+bias was not such a concern. Therefore, I trained only 10 random trees.
+
+```{r model1, echo=TRUE}
+modeltree <- train(classe ~ ., trainset, method = "rf", ntree = 10)
+```
+
+Then this model with few trees was tested in the validation split created 
+before. The results were very satisfying. The accuracy in the validation set was 
+0.99. This is expected to be our out of sample error.
+
+```{r model2, echo=TRUE, comment=NA}
+pred <- predict(modeltree, validtn)
+confusionMatrix(pred, as.factor(validtn$classe))
+```
+
